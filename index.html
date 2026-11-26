@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MessageX - Messenger</title>
+    <!-- PeerJS Library -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        :root {
+            --primary: #1877f2;
+            --ig-grad: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+            --bg: #f0f2f5;
+            --card: #ffffff;
+            --text: #1c1e21;
+            --muted: #65676b;
+            --border: #dddfe2;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        
+        body { background: #d0d4dc; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+
+        .app-shell {
+            width: 100%; max-width: 420px; height: 100vh; max-height: 820px;
+            background: var(--bg); display: flex; flex-direction: column;
+            box-shadow: 0 12px 28px rgba(0,0,0,0.15); overflow: hidden; position: relative;
+        }
+
+        @media (min-width: 450px) { .app-shell { border-radius: 16px; height: 90vh; } }
+
+        .header {
+            background: var(--card); padding: 12px 16px; border-bottom: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center; z-index: 10;
+        }
+        .logo {
+            font-size: 22px; font-weight: 800; background: var(--ig-grad);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .user-badge {
+            font-size: 13px; font-weight: 600; color: var(--text);
+            background: var(--bg); padding: 5px 10px; border-radius: 20px;
+            display: flex; align-items: center; gap: 6px; cursor: pointer;
+        }
+        .online-dot { width: 8px; height: 8px; background: #31a24c; border-radius: 50%; }
+
+        .view { display: none; flex: 1; flex-direction: column; overflow-y: auto; }
+        .view.active { display: flex; }
+
+        input {
+            width: 100%; padding: 12px 14px; border: 1px solid var(--border);
+            border-radius: 8px; font-size: 15px; margin-bottom: 12px; outline: none;
+        }
+        input:focus { border-color: var(--primary); }
+
+        .btn {
+            width: 100%; padding: 12px; border: none; border-radius: 8px;
+            font-size: 15px; font-weight: 600; cursor: pointer; transition: 0.2s;
+        }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: #166fe5; }
+        .btn-outline { background: var(--card); border: 1px solid var(--border); color: var(--text); }
+
+        .section-card {
+            background: var(--card); margin: 10px; padding: 14px; border-radius: 10px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+        .section-title { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; margin-bottom: 10px; }
+
+        .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .action-box {
+            padding: 14px 10px; border-radius: 10px; text-align: center; cursor: pointer;
+            border: 1px solid var(--border); background: #f8f9fa; transition: 0.15s;
+        }
+        .action-box:hover { border-color: var(--primary); background: #eef5ff; }
+        .action-box span { display: block; font-size: 22px; margin-bottom: 4px; }
+        .action-box strong { font-size: 13px; color: var(--text); }
+
+        .friends-row { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 6px; }
+        .friend-avatar {
+            display: flex; flex-direction: column; align-items: center; min-width: 60px; cursor: pointer;
+        }
+        .avatar-ring {
+            width: 52px; height: 52px; border-radius: 50%; padding: 2px;
+            background: var(--ig-grad); display: flex; justify-content: center; align-items: center;
+        }
+        .avatar-inner {
+            width: 100%; height: 100%; background: var(--card); border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            font-weight: 700; color: var(--text); font-size: 18px; border: 2px solid white;
+        }
+        .friend-name { font-size: 11px; margin-top: 4px; color: var(--text); max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        .key-display {
+            background: #eef5ff; border: 1px dashed var(--primary); padding: 12px;
+            border-radius: 8px; text-align: center; margin-top: 10px; display: none;
+        }
+        .key-code { font-family: monospace; font-size: 24px; font-weight: 800; color: var(--primary); letter-spacing: 3px; }
+
+        .modal {
+            display: none; position: absolute; inset: 0; background: rgba(0,0,0,0.5);
+            justify-content: center; align-items: center; padding: 20px; z-index: 50;
+        }
+        .modal.active { display: flex; }
+        .modal-box { background: var(--card); width: 100%; padding: 20px; border-radius: 12px; }
+
+        .chat-header {
+            background: var(--card); padding: 10px 14px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .chat-user-info { display: flex; align-items: center; gap: 10px; }
+        .back-btn { background: none; border: none; font-size: 20px; cursor: pointer; padding-right: 6px; }
+        .add-friend-btn {
+            background: #e7f3ff; color: var(--primary); border: none; padding: 6px 10px;
+            border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;
+        }
+        .add-friend-btn.added { background: #e4e6eb; color: var(--muted); }
+
+        .messages-area {
+            flex: 1; padding: 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; background: #fafafa;
+        }
+        .msg {
+            max-width: 75%; padding: 10px 14px; border-radius: 18px; font-size: 14px; line-height: 1.4; word-wrap: break-word;
+        }
+        .msg.me { align-self: flex-end; background: var(--primary); color: white; border-bottom-right-radius: 4px; }
+        .msg.them { align-self: flex-start; background: var(--card); color: var(--text); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+        .msg-sys { align-self: center; font-size: 11px; color: var(--muted); background: #e4e6eb; padding: 4px 10px; border-radius: 12px; }
+
+        .chat-input-bar {
+            background: var(--card); padding: 10px; border-top: 1px solid var(--border);
+            display: flex; gap: 8px; align-items: center;
+        }
+        .chat-input-bar input { margin-bottom: 0; border-radius: 20px; background: var(--bg); border: none; }
+        .send-btn {
+            background: var(--primary); color: white; border: none; padding: 10px 16px;
+            border-radius: 20px; font-weight: 600; cursor: pointer;
+        }
+
+        .bottom-nav {
+            background: var(--card); border-top: 1px solid var(--border);
+            display: flex; justify-content: space-around; padding: 10px 0;
+        }
+        .nav-item { font-size: 12px; color: var(--muted); text-align: center; cursor: pointer; font-weight: 600; }
+        .nav-item.active { color: var(--primary); }
+    </style>
+</head>
+<body>
+
+<div class="app-shell">
+    <div id="homeView" class="view active">
+        <div class="header">
+            <div class="logo">MessageX</div>
+            <div class="user-badge" onclick="changeUsername()">
+                <span class="online-dot"></span>
+                <span id="displayUsername">User</span> ✏️
+            </div>
+        </div>
+
+        <div class="section-card">
+            <div class="section-title">Friends List (<span id="friendCount">0</span>)</div>
+            <div class="friends-row" id="friendsList">
+                <div style="font-size: 13px; color: var(--muted);">No friends added yet.</div>
+            </div>
+        </div>
+
+        <div class="section-card">
+            <div class="section-title">Connect & Chat</div>
+            <div class="action-grid">
+                <div class="action-box" onclick="createMessageSession()">
+                    <span>🔑</span>
+                    <strong>Make Session</strong>
+                </div>
+                <div class="action-box" onclick="openKeyModal()">
+                    <span>💬</span>
+                    <strong>Type Key</strong>
+                </div>
+            </div>
+
+            <div class="key-display" id="sessionBox">
+                <div style="font-size: 12px; color: var(--muted);">Your Message Key:</div>
+                <div class="key-code" id="generatedKeyText">------</div>
+                <div style="font-size: 11px; color: #31a24c; margin-top: 4px;" id="sessionStatus">Waiting...</div>
+            </div>
+        </div>
+
+        <div class="section-card" style="flex: 1;">
+            <div class="section-title">Info</div>
+            <div style="text-align: center; padding: 20px 10px; color: var(--muted);">
+                <span style="font-size: 13px;">P2P Direct Messaging & Calling App.</span>
+            </div>
+        </div>
+
+        <div class="bottom-nav">
+            <div class="nav-item active" onclick="showHome()">🏠 Chats</div>
+            <div class="nav-item" onclick="openKeyModal()">🔑 Enter Key</div>
+        </div>
+    </div>
+
+    <div id="chatView" class="view">
+        <div class="chat-header">
+            <div class="chat-user-info">
+                <button type="button" class="back-btn" onclick="leaveChat()">←</button>
+                <div>
+                    <div style="font-weight: 700; font-size: 15px;" id="chatPartnerName">Partner</div>
+                    <div style="font-size: 11px; color: #31a24c;" id="chatKeyBadge">Key: ------</div>
+                </div>
+            </div>
+            <div style="display: flex; gap: 6px;">
+                <button type="button" class="add-friend-btn" id="addFriendBtn" onclick="addCurrentPartnerAsFriend()">+ Friend</button>
+                <button type="button" class="add-friend-btn" onclick="startAudioCall()" style="background: #28a745; color: white;">📞 Call</button>
+            </div>
+        </div>
+
+        <div class="messages-area" id="messagesArea"></div>
+
+        <div class="chat-input-bar">
+            <input type="text" id="messageInput" placeholder="Type a message..." onkeypress="if(event.key==='Enter') sendMessage()">
+            <button type="button" class="send-btn" onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
+    <div class="modal" id="keyModal">
+        <div class="modal-box">
+            <h3 style="margin-bottom: 6px;">Enter Message Key</h3>
+            <input type="text" id="joinKeyInput" placeholder="Key (e.g. QakxgI)" maxlength="6" style="font-family: monospace; font-size: 20px; text-align: center; letter-spacing: 3px;" onkeypress="if(event.key==='Enter') joinMessageSession()">
+            <div style="display: flex; gap: 8px;">
+                <button type="button" class="btn btn-outline" onclick="closeKeyModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="joinMessageSession()">Connect</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<audio id="remoteAudio" autoplay></audio>
+
+<script>
+    function saveData(key, value) {
+        try { localStorage.setItem(key, value); } catch (e) {}
+    }
+    function loadData(key, fallback) {
+        try { return localStorage.getItem(key) || fallback; } catch (e) { return fallback; }
+    }
+
+    let currentUser = loadData('mx_user', '');
+    if (!currentUser) {
+        currentUser = 'User_' + Math.floor(1000 + Math.random() * 9000);
+        saveData('mx_user', currentUser);
+    }
+
+    let friends = [];
+    try { friends = JSON.parse(loadData('mx_friends', '[]')); } catch (e) { friends = []; }
+
+    let peer = null;
+    let activeConn = null;
+    let localStream = null;
+    let currentPartner = '';
+    let activeKey = '';
+    const APP_PREFIX = "messagex-chat-v1-";
+
+    window.onload = () => { showHome(); };
+
+    function changeUsername() {
+        const newName = prompt("Change your username:", currentUser);
+        if (newName && newName.trim()) {
+            currentUser = newName.trim();
+            saveData('mx_user', currentUser);
+            document.getElementById('displayUsername').innerText = currentUser;
+        }
+    }
+
+    function showHome() {
+        document.getElementById('chatView').classList.remove('active');
+        document.getElementById('homeView').classList.add('active');
+        document.getElementById('displayUsername').innerText = currentUser;
+        renderFriends();
+    }
+
+    function renderFriends() {
+        const list = document.getElementById('friendsList');
+        document.getElementById('friendCount').innerText = friends.length;
+        if (friends.length === 0) {
+            list.innerHTML = `<div style="font-size: 13px; color: var(--muted);">No friends added yet.</div>`;
+            return;
+        }
+        list.innerHTML = friends.map(f => `
+            <div class="friend-avatar">
+                <div class="avatar-ring"><div class="avatar-inner">${f.charAt(0).toUpperCase()}</div></div>
+                <div class="friend-name">${f}</div>
+            </div>
+        `).join('');
+    }
+
+    function addCurrentPartnerAsFriend() {
+        if (!currentPartner || friends.includes(currentPartner)) return;
+        friends.push(currentPartner);
+        saveData('mx_friends', JSON.stringify(friends));
+        updateFriendButton();
+        renderFriends();
+    }
+
+    function updateFriendButton() {
+        const btn = document.getElementById('addFriendBtn');
+        if (friends.includes(currentPartner)) {
+            btn.innerText = "✓ Friends";
+            btn.classList.add('added');
+        } else {
+            btn.innerText = "+ Add Friend";
+            btn.classList.remove('added');
+        }
+    }
+
+    function generateKeyString() {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        let result = '';
+        for (let i = 0; i < 6; i++) {
+            result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return result;
+    }
+
+    function createMessageSession() {
+        if (typeof Peer === 'undefined') {
+            alert("Network library loading or internet blocked.");
+            return;
+        }
+        if (peer) { try { peer.destroy(); } catch(e) {} }
+        activeKey = generateKeyString();
+        
+        document.getElementById('sessionBox').style.display = 'block';
+        document.getElementById('generatedKeyText').innerText = activeKey;
+        document.getElementById('sessionStatus').innerText = "Connecting...";
+
+        peer = new Peer(APP_PREFIX + activeKey, { host: '0.peerjs.com', port: 443, secure: true });
+
+        peer.on('open', () => {
+            document.getElementById('sessionStatus').innerText = "Session active! Waiting for friend...";
+        });
+
+        peer.on('connection', (conn) => {
+            activeConn = conn;
+            setupConnectionHandlers();
+        });
+
+        setupCallHandlers();
+
+        peer.on('error', (err) => {
+            if (err.type === 'unavailable-id') {
+                createMessageSession();
+            } else {
+                alert("Session error: " + err.type);
+            }
+        });
+    }
+
+    function openKeyModal() {
+        document.getElementById('keyModal').classList.add('active');
+        document.getElementById('joinKeyInput').focus();
+    }
+
+    function closeKeyModal() {
+        document.getElementById('keyModal').classList.remove('active');
+    }
+
+    function joinMessageSession() {
+        const inputKey = document.getElementById('joinKeyInput').value.trim();
+        if (inputKey.length !== 6) return alert("Enter a valid 6-character key.");
+
+        activeKey = inputKey;
+        closeKeyModal();
+
+        if (peer) { try { peer.destroy(); } catch(e) {} }
+        
+        peer = new Peer({ host: '0.peerjs.com', port: 443, secure: true });
+
+        peer.on('open', () => {
+            activeConn = peer.connect(APP_PREFIX + activeKey);
+            setupConnectionHandlers();
+        });
+
+        setupCallHandlers();
+
+        peer.on('error', (err) => {
+            alert("Could not connect with Key: " + activeKey);
+        });
+    }
+
+    function setupConnectionHandlers() {
+        activeConn.on('open', () => {
+            activeConn.send({ type: 'handshake', username: currentUser });
+            openChatUI();
+        });
+
+        activeConn.on('data', (data) => {
+            if (data.type === 'handshake') {
+                currentPartner = data.username;
+                document.getElementById('chatPartnerName').innerText = currentPartner;
+                updateFriendButton();
+                appendSystemMsg(`${currentPartner} joined the chat`);
+            } else if (data.type === 'chat') {
+                appendMessage(data.text, 'them');
+            }
+        });
+
+        activeConn.on('close', () => { appendSystemMsg("Chat closed."); });
+    }
+
+    async function startAudioCall() {
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            appendSystemMsg("Calling " + currentPartner + "...");
+            const call = peer.call(activeConn.peer, localStream);
+            call.on('stream', (remoteStream) => { playRemoteStream(remoteStream); appendSystemMsg("Call connected."); });
+            call.on('close', () => { appendSystemMsg("Call ended."); stopLocalAudio(); });
+        } catch (err) {
+            alert("Microphone permission denied.");
+        }
+    }
+
+    function setupCallHandlers() {
+        peer.on('call', async (call) => {
+            if (confirm("Incoming call from " + (currentPartner || "Partner") + "! Accept?")) {
+                try {
+                    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                    call.answer(localStream);
+                    call.on('stream', (remoteStream) => { playRemoteStream(remoteStream); appendSystemMsg("Call connected."); });
+                    call.on('close', () => { appendSystemMsg("Call ended."); stopLocalAudio(); });
+                } catch (err) { alert("Microphone error."); }
+            } else { call.close(); }
+        });
+    }
+
+    function playRemoteStream(stream) {
+        const audio = document.getElementById('remoteAudio');
+        audio.srcObject = stream;
+        audio.play().catch(e => console.log(e));
+    }
+
+    function stopLocalAudio() {
+        if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+    }
+
+    function openChatUI() {
+        document.getElementById('homeView').classList.remove('active');
+        document.getElementById('chatView').classList.add('active');
+        document.getElementById('chatKeyBadge').innerText = `Key: ${activeKey}`;
+        document.getElementById('messagesArea').innerHTML = '';
+        appendSystemMsg(`Connected with Key: ${activeKey}`);
+    }
+
+    function sendMessage() {
+        const input = document.getElementById('messageInput');
+        const text = input.value.trim();
+        if (!text || !activeConn) return;
+        activeConn.send({ type: 'chat', text: text });
+        appendMessage(text, 'me');
+        input.value = '';
+    }
+
+    function appendMessage(text, sender) {
+        const area = document.getElementById('messagesArea');
+        const div = document.createElement('div');
+        div.className = `msg ${sender}`;
+        div.innerText = text;
+        area.appendChild(div);
+        area.scrollTop = area.scrollHeight;
+    }
+
+    function appendSystemMsg(text) {
+        const area = document.getElementById('messagesArea');
+        const div = document.createElement('div');
+        div.className = 'msg-sys';
+        div.innerText = text;
+        area.appendChild(div);
+        area.scrollTop = area.scrollHeight;
+    }
+
+    function leaveChat() {
+        stopLocalAudio();
+        if (activeConn) activeConn.close();
+        if (peer) peer.destroy();
+        document.getElementById('sessionBox').style.display = 'none';
+        showHome();
+    }
+</script>
+
+</body>
+</html>
